@@ -1,5 +1,6 @@
 "use client";
 
+import Lenis from "lenis";
 import { useEffect, useRef } from "react";
 import { releaseBirds } from "@/lib/birds";
 import { createRain } from "@/lib/rain";
@@ -39,11 +40,15 @@ export function Storm() {
     if (!program) root.dataset.nogl = "";
     canvas.addEventListener("webglcontextlost", () => (root.dataset.nogl = ""));
     root.dataset.umbrella = "";
+    // Smooth scrolling: the wheel glides on and settles instead of stopping dead. Lenis still
+    // scrolls the real page, so the CSS text fades and the #top link keep working. Phones keep
+    // their own momentum; reduced motion keeps plain scrolling.
+    const lenis = matchMedia("(prefers-reduced-motion: reduce)").matches ? null : new Lenis({ autoRaf: true, anchors: true, lerp: 0.08 });
 
     const u = (name: string) => gl && program && gl.getUniformLocation(program, name);
     const uRes = u("uRes"), uTime = u("uTime"), uP = u("uP"), uFlash = u("uFlash"), uLook = u("uLook");
     const uPointer = u("uPointer"), uStir = u("uStir"), uCharge = u("uCharge");
-    const uSpin = u("uSpin"), uRainT = u("uRainT"), uGust = u("uGust");
+    const uSpin = u("uSpin"), uRainT = u("uRainT"), uGust = u("uGust"), uWindT = u("uWindT");
     const uBolt = u("uBolt"), uBoltAge = u("uBoltAge");
     const boltData = new Float32Array(BOLTS * 4), ageData = new Float32Array(BOLTS * 3);
 
@@ -51,7 +56,7 @@ export function Storm() {
     let target = 0, p = 0, time = 0, flash = 0, nextFlash = 3, lastFlash = -1, look = [0, 0], lookTo = [0, 0];
     let last = performance.now(), raf = 0, shownSignal = -1, ready = false;
     // Scroll speed whips up gusts: they speed the cloud spin and the rain, so both run on their own clocks.
-    let prevTarget = 0, gust = 0, spin = 0, rainT = 0;
+    let prevTarget = 0, gust = 0, spin = 0, rainT = 0, windT = 0;
     // Pointer in the shader's units (centre 0,0, y up, shorter screen side = 1). presence fades the
     // pointer's effects in and out; stir grows with how far it moved recently.
     let pointer = [0, 0], pointerTo = [0, 0], presence = 0, presenceTo = 0, stir = 0, moved = 0;
@@ -136,11 +141,14 @@ export function Storm() {
       p += (target - p) * k(5);
       const kmh = windAt(p);
       const windS = smooth(0, 0.6, p) * (1 - smooth(0.6, 0.78, p));
+      // Rain slant: sideways per unit fallen. Same formula as the shader's.
+      const slantNow = Math.min(0.15 + 0.5 * windS + 0.5 * gust, 0.9);
       if (!calm) {
         time += dt;
         gust += (Math.min((Math.abs(target - prevTarget) / Math.max(dt, 1e-3)) * 1.2, 1) - gust) * (1 - Math.exp(-dt * 3));
         spin += dt * (0.04 + 0.22 * windS + 0.6 * gust);
         rainT += dt * (1 + 1.5 * gust);
+        windT += dt * (1 + 1.5 * gust) * slantNow;
         look = look.map((l, i) => l + (lookTo[i] - l) * k(3));
         // Sheet lightning while the storm builds, at most one every 2.5 s.
         if (time > nextFlash && p > 0.1 && p < PEAK + 0.05 && time - lastFlash > 0.4) {
@@ -191,9 +199,8 @@ export function Storm() {
       rainCtx.clearRect(0, 0, innerWidth, innerHeight);
       if (!calm) {
         const amount = (0.35 + 0.65 * smooth(0, 0.6, p)) * (1 - smooth(0.58, 0.72, p));
-        const slant = 0.15 + 0.5 * windS + 0.5 * gust;
         const blocking = state === "open" && presence > 0.5;
-        rain.step(dt, innerWidth, innerHeight, amount, slant, { x: px[0], y: px[1], angle: (lean * Math.PI) / 180, scale: UMBRELLA_SCALE, blocking, vx, vy });
+        rain.step(dt, innerWidth, innerHeight, amount, slantNow, { x: px[0], y: px[1], angle: (lean * Math.PI) / 180, scale: UMBRELLA_SCALE, blocking, vx, vy });
         rain.draw(rainCtx);
       }
 
@@ -214,6 +221,7 @@ export function Storm() {
         gl.uniform1f(uCharge, charge);
         gl.uniform1f(uSpin, spin);
         gl.uniform1f(uRainT, rainT);
+        gl.uniform1f(uWindT, windT);
         gl.uniform1f(uGust, gust);
         gl.uniform4fv(uBolt, boltData);
         gl.uniform3fv(uBoltAge, ageData);
@@ -253,6 +261,7 @@ export function Storm() {
       cancelAnimationFrame(raf);
       for (const [t, type, fn] of listeners) t.removeEventListener(type, fn);
       delete root.dataset.umbrella;
+      lenis?.destroy();
     };
   }, []);
 

@@ -24,7 +24,7 @@ export default function Home() {
       <main>
         <section className="grid min-h-svh place-items-center px-4 text-center">
           <div className="beat over-storm">
-            <p className="text-xs uppercase tracking-[0.4em] text-foam/80">Signal No. 1 · a storm in five signals</p>
+            <p className="mb-[clamp(1.25rem,4vw,3rem)] text-xs uppercase tracking-[0.4em] text-foam/80">Signal No. 1 · a storm in five signals</p>
             <h1 className="font-display text-[clamp(6rem,24vw,20rem)] font-black uppercase leading-[0.8] tracking-tight">
               Bagyo
             </h1>

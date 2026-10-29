@@ -4,7 +4,8 @@ A scroll-driven WebGL study: scroll up into a typhoon. Rain bands and a turning 
 through the five PAGASA wind signals, then the eye opens onto clear sky. Everything you see in the
 storm is drawn by one fragment shader. There are no 3D models, video or images.
 
-Built with Next.js 15, TypeScript and Tailwind CSS 4. No 3D or animation libraries.
+Built with Next.js 15, TypeScript and Tailwind CSS 4, plus Lenis (about 4 kB) for smooth scrolling.
+No 3D or animation libraries.
 
 ## What you can do
 
@@ -28,8 +29,13 @@ Built with Next.js 15, TypeScript and Tailwind CSS 4. No 3D or animation librari
 - **Lightning behaves like lightning.** A dim leader steps down from the cloud, the bright return
   stroke fires when it lands, two weaker re-strikes follow down the same channel, and it fades
   through a violet afterglow. You can click as fast as you like; up to four bolts share the sky.
-- **The umbrella's dry patch follows the rain.** The shader works out which points are downwind of
-  the canopy along the current rain angle, so the shadow tilts as the wind picks up.
+- **The umbrella really blocks the rain.** The near rain is particles (`src/lib/rain.ts`): drops that
+  hit the canopy stop and splash, their water runs to the rim and drips off, and the wind carries the
+  drips onto the rain's slant. The shader only draws the distant rain behind.
+- **Wind carries the rain, it doesn't bend it.** The distant rain drifts sideways on its own clock,
+  so a change of wind (scrolling) changes where drops go next without sliding the ones already falling.
+- **Smooth scrolling.** Lenis lets the wheel glide on and settle. The page still scrolls for real, so
+  CSS scroll animations and the back-to-top link work; phones keep their own momentum.
 
 ## Accessibility and safety
 

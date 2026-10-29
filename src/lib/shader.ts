@@ -24,6 +24,7 @@ uniform vec3 uBoltAge[BOLTS]; // per strike: seconds since the click, charge 0..
 uniform float uCharge; // 0..1 while the pointer is held down, before the strike
 uniform float uSpin;   // cloud spin phase, so scroll gusts can speed it up without jumps
 uniform float uRainT;  // rain fall clock, also sped up by gusts
+uniform float uWindT;  // how far the wind has carried the rain: the sum of slant × fall clock
 uniform float uGust;   // 0..1, how fast the page is being scrolled
 out vec4 outColor;
 
@@ -48,15 +49,25 @@ float fbm(vec2 p) {
 
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 
-// One layer of rain: each column holds drops at random heights; a drop is a bright head
-// with a fading tail above it. slant tilts the columns with the wind.
+// One layer of rain. Each column holds drops at random heights; a drop is a bright head with a
+// fading tail above it. Drops fall with the fall clock and are carried sideways by the wind clock,
+// so a change of wind only changes where drops go next; it never slides the drops already falling
+// (shearing the whole field by the slant did, which showed as rain jumping sideways on scroll).
+// The tail leans by the current slant, so it can reach into the next few columns: check those too.
 float rain(vec2 uv, float cols, float speed, float slant, float len) {
-  uv.x += uv.y * slant;
-  float col = floor(uv.x * cols);
-  float y = uv.y * cols * 0.12 + uRainT * speed + hash(vec2(col, 7.0)) * 20.0;
-  float cell = floor(y), f = fract(y);
-  float x = fract(uv.x * cols) - (0.2 + 0.6 * hash(vec2(cell, col)));
-  return smoothstep(len, 0.0, f) * smoothstep(0.12, 0.0, abs(x)) * step(0.55, hash(vec2(col, cell)));
+  float rows = cols * 0.12;                // cells are this many times taller than wide
+  float fall = speed / rows;               // fall speed in this layer's units
+  float x = (uv.x - uWindT * fall) * cols; // in column widths, moving with the wind
+  float v = 0.0;
+  for (int k = 0; k < 5; k++) {
+    float col = floor(x) + float(k);
+    float y = uv.y * rows + uRainT * speed + hash(vec2(col, 7.0)) * 20.0;
+    float cell = floor(y), f = fract(y);
+    float head = col + 0.2 + 0.6 * hash(vec2(cell, col));
+    float d = abs(x - (head - slant * f / 0.12));
+    v = max(v, smoothstep(len, 0.0, f) * smoothstep(0.12, 0.0, d) * step(0.55, hash(vec2(col, cell))));
+  }
+  return v;
 }
 
 float zig(float y, float seed) {
@@ -178,7 +189,7 @@ void main() {
   sky += vec3(1.0, 0.8, 0.5) * 0.35 * exp(-8.0 * length(v - sun));
   vec3 col = mix(sky, cl, wall);
 
-  float slant = 0.15 + 0.5 * wind + 0.5 * uGust;
+  float slant = min(0.15 + 0.5 * wind + 0.5 * uGust, 0.9);
   // Two distant layers only. The near rain is drawn as particles (rain.ts) so the umbrella can block it.
   float rn = rain(uv, 40.0, 1.6, slant, 0.35) * 0.5
            + rain(uv * 1.7 + 3.0, 70.0, 2.4, slant, 0.45) * 0.35;

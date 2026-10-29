@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Big_Shoulders, IBM_Plex_Mono } from "next/font/google";
+import "lenis/dist/lenis.css";
 import "./globals.css";
 
 const shoulders = Big_Shoulders({ variable: "--font-shoulders", subsets: ["latin"], weight: ["700", "900"] });

@@ -41,6 +41,7 @@ export function rimEnd(c: Canopy, side: number): [number, number] {
 const RAIN = 0, SPLASH = 1, DRIP = 2;
 type Drop = { kind: number; x: number; y: number; vx: number; vy: number; depth: number; life: number };
 
+const WIND_FALL = 1200; // a typical raindrop's fall speed, px/s: sideways wind speed = this × slant
 const GRAVITY = 2200; // px/s², for splashes and drips; rain is already at its falling speed
 const DRIP_EVERY = 2.5; // drops of water that make one drip off the rim
 
@@ -92,8 +93,9 @@ export function createRain() {
         d.y = ny;
       } else {
         d.vy = Math.min(d.vy + GRAVITY * dt, 1400);
-        // Drips pick up the wind as they fall, ending up on the rain's slant.
-        if (d.kind === DRIP) d.vx += (d.vy * slant - d.vx) * Math.min(dt * 4, 1);
+        // The wind pushes drips and splashes sideways towards the rain's own sideways speed,
+        // so they fall on the same slant as the rain around them.
+        d.vx += (WIND_FALL * slant - d.vx) * Math.min(dt * (d.kind === DRIP ? 6 : 3), 1);
         d.x += d.vx * dt;
         d.y += d.vy * dt;
         d.life -= dt;
