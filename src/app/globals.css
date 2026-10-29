@@ -15,6 +15,12 @@
 html {
   background: #141b22;
   color: var(--color-foam);
+  /* No scrollbar: its gutter showed as a dark strip beside the bright eye, and the wind gauge already
+     shows how far down you are. Wheel, touch, keyboard and smooth scrolling all still work. */
+  scrollbar-width: none;
+}
+html::-webkit-scrollbar {
+  display: none;
 }
 
 /* Same colour as the shader's first frame, so the canvas never flashes white or black while it starts. */
