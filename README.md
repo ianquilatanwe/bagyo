@@ -15,7 +15,8 @@ No 3D or animation libraries.
 | Move the pointer | The umbrella leans into the wind; rain leaves a dry patch under it and runs off its edges; fast moves stir the clouds; a hard flick at Signal 4+ turns it inside out | The umbrella folds; the sun leans towards it |
 | Click / tap | Lightning strikes that spot | Birds fly up from that spot |
 | Hold, then release | A charged strike: wider, with a fork | |
-| Phone: hold still, then drag | The umbrella takes your finger and the page stops scrolling until you let go | The same, folded |
+| Phone: drag | The umbrella follows your finger, just above it; up-and-down drags still scroll | The same, folded |
+| Phone: hold still, then drag | The same, but the page stops scrolling until you let go | |
 
 ## How it works, in plain words
 

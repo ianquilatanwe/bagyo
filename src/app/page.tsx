@@ -30,7 +30,7 @@ export default function Home() {
             </h1>
             <p className="mt-6 text-sm text-foam/80">Scroll into it.{" "}
               <span className="pointer-coarse:hidden">Move to stir it. Click, or hold, to call the lightning.</span>
-              <span className="hidden pointer-coarse:inline">Tap for lightning. Hold, then drag, to carry the umbrella.</span>
+              <span className="hidden pointer-coarse:inline">Tap for lightning. Drag to carry the umbrella.</span>
             </p>
           </div>
         </section>

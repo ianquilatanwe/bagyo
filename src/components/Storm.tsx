@@ -101,65 +101,73 @@ export function Storm() {
       const max = root.scrollHeight - innerHeight;
       target = max > 0 ? Math.min(scrollY / max, 1) : 0;
     };
-    const onPointer = (e: PointerEvent) => {
-      lookTo = [e.clientX / innerWidth - 0.5, 0.5 - e.clientY / innerHeight];
-      const next = toShader(e.clientX, e.clientY);
+    // Moves the umbrella (and everything that follows the pointer) to a point on screen.
+    const movePointer = (x: number, y: number, target: EventTarget | null) => {
+      lookTo = [x / innerWidth - 0.5, 0.5 - y / innerHeight];
+      const next = toShader(x, y);
       if (presenceTo) moved += Math.hypot(next[0] - pointerTo[0], next[1] - pointerTo[1]);
       pointerTo = next;
-      px = [e.clientX, e.clientY];
+      px = [x, y];
       // Arriving (or a new touch) is not a flick: start the speed from here.
       if (!presenceTo) prevPx = px;
       presenceTo = 1;
-      overLink = !!(e.target as Element).closest?.("a, button");
+      overLink = !!(target as Element)?.closest?.("a, button");
     };
-    // Touch has no hover: the umbrella only shows while a finger is down.
+    // Touch is handled by the touch events below, which keep reporting the finger while the page scrolls.
+    const onPointer = (e: PointerEvent) => e.pointerType !== "touch" && movePointer(e.clientX, e.clientY, e.target);
     const onLeave = (e: PointerEvent) => {
-      if (e.type === "pointerout" ? !e.relatedTarget : e.pointerType !== "mouse") presenceTo = 0;
+      if (e.type === "pointerout" && !e.relatedTarget) presenceTo = 0;
       if (e.type === "pointercancel") chargeFrom = -1; // the finger started a scroll
     };
     const onDown = (e: PointerEvent) => {
       onPointer(e);
-      if (e.button === 0 && !overLink && !still.matches) chargeFrom = time;
+      const onLink = !!(e.target as Element).closest?.("a, button");
+      if (e.button === 0 && !onLink && !still.matches) chargeFrom = time;
     };
     const onUp = (e: PointerEvent) => {
       const held = chargeFrom < 0 ? -1 : time - chargeFrom;
       chargeFrom = -1;
       onLeave(e);
       if (held < 0) return;
-      if (inStorm()) strike(Math.min(held / 1.2, 1));
+      // A tap strikes where the finger is; the umbrella itself floats just above it.
+      if (inStorm()) strike(Math.min(held / 1.2, 1), toShader(e.clientX, e.clientY));
       else if (inEye()) sound.birds(releaseBirds(birdsRef.current!, e.clientX, e.clientY), (e.clientX / innerWidth) * 2 - 1);
     };
 
-    // Touch: hold still for a moment and the umbrella takes the finger. From then until the finger
-    // lifts the page doesn't scroll (the touch moves are cancelled), so dragging carries the umbrella
-    // like a mouse pointer. Dragging also drops the charge, so letting go after a drag doesn't strike;
-    // letting go of a still hold is a charged strike, same as with a mouse. Quick swipes still scroll.
-    const HOLD_MS = 320, SLOP = 10;
+    // Touch: the umbrella follows the finger on any drag, floating a little above the fingertip so the
+    // finger doesn't hide it. Up-and-down drags still scroll the page (the umbrella rides along); touch
+    // events keep reporting the finger during a scroll, pointer events don't. Moving at all drops the
+    // charge, so only a tap strikes. Hold still for a moment first and the page stops scrolling until
+    // the finger lifts, to carry the umbrella around a still page; a still hold released is a charged strike.
+    const HOLD_MS = 320, SLOP = 10, LIFT = 64;
     let holdTimer = 0, holding = false, dragged = false, touchFrom = [0, 0];
     const onTouchStart = (e: TouchEvent) => {
       clearTimeout(holdTimer);
       holding = dragged = false;
       if (e.touches.length !== 1 || (e.target as Element).closest?.("a, button")) return;
       touchFrom = [e.touches[0].clientX, e.touches[0].clientY];
+      movePointer(touchFrom[0], touchFrom[1] - LIFT, e.target);
       holdTimer = window.setTimeout(() => {
         holding = true;
         navigator.vibrate?.(10); // a small tick on phones that support it (not iPhone)
       }, HOLD_MS);
     };
     const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
       const t = e.touches[0];
+      movePointer(t.clientX, t.clientY - LIFT, e.target);
       const far = Math.hypot(t.clientX - touchFrom[0], t.clientY - touchFrom[1]) > SLOP;
-      if (holding) {
-        e.preventDefault();
-        if (far && !dragged) {
-          dragged = true;
-          chargeFrom = -1;
-        }
-      } else if (far) clearTimeout(holdTimer); // moved before the hold finished: it's a scroll
+      if (holding) e.preventDefault();
+      if (far && !dragged) {
+        dragged = true;
+        chargeFrom = -1; // a drag, not a tap: no lightning on release
+        clearTimeout(holdTimer); // and if it moved before the hold finished, it's an ordinary drag
+      }
     };
-    const onTouchEnd = () => {
+    const onTouchEnd = (e: TouchEvent) => {
       clearTimeout(holdTimer);
       holding = false;
+      if (!e.touches.length) presenceTo = 0;
     };
     const onVisibility = () => sound.setVisible(document.visibilityState === "visible");
     // A long press would otherwise open the browser's menu.
@@ -168,8 +176,7 @@ export function Storm() {
     // Every click strikes: up to four bolts share the sky, the oldest makes way. Only the
     // full-screen flash is rate-limited (one per 0.4 s, under the three-flashes-a-second limit),
     // and the automatic lightning holds off for 2 s so it never stacks on top.
-    const strike = (power: number) => {
-      const [x, y] = pointerTo;
+    const strike = (power: number, [x, y] = pointerTo) => {
       const s: Strike = { x, y, top: x + (Math.random() - 0.5) * 0.6, seed: Math.random() * 100, age: 0, power, lit: false };
       if (strikes.length >= BOLTS) strikes.shift();
       strikes.push(s);
@@ -321,8 +328,8 @@ export function Storm() {
       [window, "pointercancel", onLeave as EventListener],
       [document, "pointerout", onLeave as EventListener],
       [window, "touchstart", onTouchStart as EventListener],
-      [window, "touchend", onTouchEnd],
-      [window, "touchcancel", onTouchEnd],
+      [window, "touchend", onTouchEnd as EventListener],
+      [window, "touchcancel", onTouchEnd as EventListener],
       [document, "visibilitychange", onVisibility],
     ];
     for (const [t, type, fn] of listeners) t.addEventListener(type, fn, { passive: true });
