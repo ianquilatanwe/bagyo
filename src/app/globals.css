@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/* Colour tokens: use them by name (text-foam, bg-ink, …). */
+@theme {
+  --color-ink: #0b1418; /* dark text in the eye, gauge backdrop */
+  --color-foam: #eef4f2; /* light text over the storm */
+  --color-squall: #9fb3b0; /* secondary text over the storm */
+  --color-sun: #ffd79a; /* focus ring, accents */
+}
+
+@theme inline {
+  --font-display: var(--font-shoulders);
+  --font-mono: var(--font-plex-mono);
+}
+
+html {
+  background: #141b22;
+  color: var(--color-foam);
+}
+
+/* Same colour as the shader's first frame, so the canvas never flashes white or black while it starts. */
+.storm-canvas {
+  background: #141b22;
+}
+
+/* No WebGL: a still gradient from storm grey to the eye's sky, scrolling with the page. */
+html[data-nogl] .storm-canvas {
+  display: none;
+}
+html[data-nogl] body {
+  background: linear-gradient(#1a2229 0%, #22302c 55%, #6a9cc8 80%, #ffe1a8 100%);
+}
+
+/* Over the storm the text needs a soft shadow: the clouds behind it keep moving. */
+.over-storm {
+  text-shadow: 0 2px 24px rgb(0 0 0 / 0.55);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-sun);
+  outline-offset: 3px;
+}
+
+/* Each section's text drifts up out of blur and back into it as the section crosses the screen.
+   Native scroll-driven animation; browsers without it just show the text. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .beat {
+      animation: beat linear both;
+      animation-timeline: view();
+      animation-range: cover 5% cover 95%;
+    }
+  }
+}
+
+@keyframes beat {
+  0% {
+    opacity: 0;
+    transform: translateY(5rem);
+    filter: blur(10px);
+  }
+  32%,
+  68% {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-5rem);
+    filter: blur(10px);
+  }
+}
+
+/* Dark text inside the eye: a soft light halo keeps it readable if it ever sits on cloud. */
+.in-eye {
+  text-shadow: 0 0 18px rgb(220 235 250 / 0.7);
+}
