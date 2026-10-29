@@ -44,12 +44,19 @@ No 3D or animation libraries.
 ## Sound
 
 Off until you press **Sound** (top right). Everything is generated in code with the Web Audio API
-(`src/lib/sound.ts`), so there are no audio files: rain is filtered noise that follows the same amount
-as the rain on screen (it fades to silence as the eye opens and stays silent to the end), a low wind
-rumble rises with the storm and with scroll gusts, drops patter on the umbrella while they hit it,
-clicked strikes get one of three kinds of thunder (crack-boom, roller or deep boom; bigger when
-charged), the background lightning gives distant
-thunder a second or two later, and released birds chirp. It pauses while the tab is hidden.
+(`src/lib/sound.ts`), so there are no audio files:
+
+- **Rain:** a stereo hiss bed plus thousands of individual droplet ticks; a heavier texture takes over
+  as the wind rises. It follows the same amount as the rain on screen, so it fades to silence as the
+  eye opens and stays silent to the end.
+- **Wind:** a low body, a howl whose pitch drifts, and a whistle in gusts (scroll fast).
+- **Umbrella:** drops tap the fabric where the umbrella is; in heavy rain the taps blur into a drumming
+  roar, and the open rain sounds a little duller underneath it.
+- **Thunder:** three kinds (crack-boom, roller, deep boom), panned to where the strike lands, with a
+  reverb tail; close strikes add a low thump, the background lightning gives distant, wetter thunder.
+- **Birds:** short trilled chirps when they take off in the eye.
+
+A compressor and a limiter keep stacked thunder from clipping. It pauses while the tab is hidden.
 
 ## Accessibility and safety
 

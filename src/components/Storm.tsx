@@ -107,7 +107,7 @@ export function Storm() {
       onLeave(e);
       if (held < 0) return;
       if (inStorm()) strike(Math.min(held / 1.2, 1));
-      else if (inEye()) sound.birds(releaseBirds(birdsRef.current!, e.clientX, e.clientY));
+      else if (inEye()) sound.birds(releaseBirds(birdsRef.current!, e.clientX, e.clientY), (e.clientX / innerWidth) * 2 - 1);
     };
 
     // Touch: hold still for a moment and the umbrella takes the finger. From then until the finger
@@ -141,6 +141,7 @@ export function Storm() {
       clearTimeout(holdTimer);
       holding = false;
     };
+    const onVisibility = () => sound.setVisible(document.visibilityState === "visible");
     // A long press would otherwise open the browser's menu.
     const onContextMenu = (e: Event) => holding && e.preventDefault();
 
@@ -192,7 +193,7 @@ export function Storm() {
         if (time > nextFlash && p > 0.1 && p < PEAK + 0.05 && time - lastFlash > 0.4) {
           flash = 0.6 + Math.random() * 0.4;
           lastFlash = time;
-          sound.thunder(0.3, true);
+          sound.thunder(0.3, true, Math.random() * 1.6 - 0.8);
           nextFlash = time + 2.5 + Math.random() * 4;
         }
         flash *= Math.exp(-dt * 7);
@@ -209,7 +210,7 @@ export function Storm() {
         s.age += dt;
         if (!s.lit && s.age >= 0.09) {
           s.lit = true;
-          sound.thunder(s.power, false);
+          sound.thunder(s.power, false, (s.x * Math.min(innerWidth, innerHeight)) / (innerWidth / 2)); // shader x → pan
           if (time - lastFlash > 0.4) {
             flash = Math.max(flash, 0.25 + 0.25 * s.power);
             lastFlash = time;
@@ -246,7 +247,7 @@ export function Storm() {
       }
       // The rain's sound follows the same amount as the rain on screen, so it fades out with it as
       // the eye opens and stays silent to the end of the page.
-      sound.update(amount, windS, gust, hits / Math.max(dt, 1e-3));
+      sound.update(amount, windS, gust, hits, (px[0] / innerWidth) * 2 - 1);
 
       if (gl && program) {
         boltData.fill(0);
@@ -301,7 +302,7 @@ export function Storm() {
       [window, "touchstart", onTouchStart as EventListener],
       [window, "touchend", onTouchEnd],
       [window, "touchcancel", onTouchEnd],
-      [document, "visibilitychange", sound.onVisibility],
+      [document, "visibilitychange", onVisibility],
     ];
     for (const [t, type, fn] of listeners) t.addEventListener(type, fn, { passive: true });
     // These two must be able to cancel: they stop the scroll while the umbrella is held.

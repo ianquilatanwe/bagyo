@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# A/B sound recordings for review, not part of the site
+/sound-review/
