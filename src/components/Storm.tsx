@@ -58,6 +58,7 @@ export function Storm() {
     const rain = createRain();
     const gl = canvas.getContext("webgl2", { antialias: false, alpha: false });
     const program = gl && link(gl);
+    const debug = showDebug(gl, !!program);
     // No WebGL: hide the canvas and let the CSS gradient in globals.css stand in. Gauge and umbrella still work.
     if (!program) root.dataset.nogl = "";
     canvas.addEventListener("webglcontextlost", () => (root.dataset.nogl = ""));
@@ -304,6 +305,7 @@ export function Storm() {
         shownSignal = signal;
         labelRef.current!.textContent = signal ? `Signal No. ${signal}` : "Eye of the storm";
       }
+      debug?.(dt);
       raf = requestAnimationFrame(frame);
     };
 
@@ -426,6 +428,38 @@ function SoundIcon({ on }: { on: boolean }) {
   );
 }
 
+let shaderError = "";
+
+// Open the site with ?debug to see, on the screen itself, what the device's GPU is and whether the
+// storm shader compiled. Phones have no console to look at, and GPU bugs only show up on the device.
+function showDebug(gl: WebGL2RenderingContext | null, ok: boolean) {
+  if (!new URLSearchParams(location.search).has("debug")) return null;
+  const box = document.createElement("pre");
+  box.style.cssText =
+    "position:fixed;left:8px;top:8px;z-index:60;max-width:calc(100vw - 16px);white-space:pre-wrap;font:11px/1.4 monospace;background:rgb(0 0 0/.75);color:#9f9;padding:8px;border-radius:6px;pointer-events:none";
+  document.body.append(box);
+  const ext = gl?.getExtension("WEBGL_debug_renderer_info");
+  const gpu = gl ? (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) : "no WebGL2";
+  const int = (kind: number) => {
+    const f = gl?.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, kind);
+    return f ? `${f.rangeMin + 1}-bit` : "?"; // rangeMin is log2 of the most negative value: 31 → 32-bit
+  };
+  const head = [
+    `GPU: ${gpu}`,
+    `shader: ${ok ? "ok" : "FAILED " + shaderError}`,
+    gl ? `int precision: high ${int(gl.HIGH_INT)}, medium ${int(gl.MEDIUM_INT)}` : "",
+    `screen: ${innerWidth}×${innerHeight} @${devicePixelRatio}x`,
+  ].join("\n");
+  let frames = 0, elapsed = 0;
+  return (dt: number) => {
+    frames++;
+    elapsed += dt;
+    if (elapsed < 0.5) return;
+    box.textContent = `${head}\nfps: ${Math.round(frames / elapsed)}`;
+    frames = elapsed = 0;
+  };
+}
+
 function link(gl: WebGL2RenderingContext) {
   const program = gl.createProgram();
   for (const [type, src] of [[gl.VERTEX_SHADER, VERT], [gl.FRAGMENT_SHADER, FRAG]] as const) {
@@ -433,13 +467,17 @@ function link(gl: WebGL2RenderingContext) {
     gl.shaderSource(shader, src);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error(gl.getShaderInfoLog(shader));
+      shaderError = gl.getShaderInfoLog(shader) ?? "compile failed";
+      console.error(shaderError);
       return null;
     }
     gl.attachShader(program, shader);
   }
   gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return null;
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    shaderError = gl.getProgramInfoLog(program) ?? "link failed";
+    return null;
+  }
   gl.useProgram(program);
   return program;
 }

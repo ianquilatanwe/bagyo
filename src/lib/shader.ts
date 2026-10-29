@@ -11,6 +11,9 @@ void main() {
 
 export const FRAG = /* glsl */ `#version 300 es
 precision highp float;
+// Whole numbers default to medium precision in fragment shaders, and phone GPUs (Adreno) really do run
+// them at 16 bits; the hash below needs full 32-bit integers or the clouds flatten out.
+precision highp int;
 uniform vec2 uRes;
 uniform float uTime;
 uniform float uP;
@@ -31,7 +34,8 @@ out vec4 outColor;
 // Random value 0..1 for a grid cell. Integer maths (the pcg2d hash), so it is exact on every GPU;
 // the usual fract(sin(...))-style float hashes lose precision on phone GPUs and turn noise blocky.
 float hash(vec2 p) {
-  uvec2 v = uvec2(ivec2(floor(p)));
+  // Shift by 2^22 first: converting a negative int to uint is handled differently by some phone drivers.
+  uvec2 v = uvec2(ivec2(floor(p)) + (1 << 22));
   v = v * 1664525u + 1013904223u;
   v.x += v.y * 1664525u;
   v.y += v.x * 1664525u;
