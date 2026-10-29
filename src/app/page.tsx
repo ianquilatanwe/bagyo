@@ -28,7 +28,10 @@ export default function Home() {
             <h1 className="font-display text-[clamp(6rem,24vw,20rem)] font-black uppercase leading-[0.8] tracking-tight">
               Bagyo
             </h1>
-            <p className="mt-6 text-sm text-foam/80">Scroll into it. Move to stir it. Click, or hold, to call the lightning.</p>
+            <p className="mt-6 text-sm text-foam/80">Scroll into it.{" "}
+              <span className="pointer-coarse:hidden">Move to stir it. Click, or hold, to call the lightning.</span>
+              <span className="hidden pointer-coarse:inline">Tap for lightning. Hold, then drag, to carry the umbrella.</span>
+            </p>
           </div>
         </section>
 
@@ -62,7 +65,7 @@ export default function Home() {
           <div className="beat in-eye max-w-md">
             <p className="font-display text-4xl font-black uppercase">Bagyo</p>
             <p className="mt-3 text-sm leading-relaxed">
-              A scroll-driven WebGL study by Ian Quilatan. One fragment shader, no 3D models, no video.
+              A scroll-driven WebGL study by Ian Joseph Quilatan. One fragment shader, no 3D models, no video.
             </p>
             <a
               href="#top"

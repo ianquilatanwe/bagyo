@@ -107,6 +107,40 @@ export function Storm() {
       else if (inEye()) releaseBirds(birdsRef.current!, e.clientX, e.clientY);
     };
 
+    // Touch: hold still for a moment and the umbrella takes the finger. From then until the finger
+    // lifts the page doesn't scroll (the touch moves are cancelled), so dragging carries the umbrella
+    // like a mouse pointer. Dragging also drops the charge, so letting go after a drag doesn't strike;
+    // letting go of a still hold is a charged strike, same as with a mouse. Quick swipes still scroll.
+    const HOLD_MS = 320, SLOP = 10;
+    let holdTimer = 0, holding = false, dragged = false, touchFrom = [0, 0];
+    const onTouchStart = (e: TouchEvent) => {
+      clearTimeout(holdTimer);
+      holding = dragged = false;
+      if (e.touches.length !== 1 || (e.target as Element).closest?.("a, button")) return;
+      touchFrom = [e.touches[0].clientX, e.touches[0].clientY];
+      holdTimer = window.setTimeout(() => {
+        holding = true;
+        navigator.vibrate?.(10); // a small tick on phones that support it (not iPhone)
+      }, HOLD_MS);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      const far = Math.hypot(t.clientX - touchFrom[0], t.clientY - touchFrom[1]) > SLOP;
+      if (holding) {
+        e.preventDefault();
+        if (far && !dragged) {
+          dragged = true;
+          chargeFrom = -1;
+        }
+      } else if (far) clearTimeout(holdTimer); // moved before the hold finished: it's a scroll
+    };
+    const onTouchEnd = () => {
+      clearTimeout(holdTimer);
+      holding = false;
+    };
+    // A long press would otherwise open the browser's menu.
+    const onContextMenu = (e: Event) => holding && e.preventDefault();
+
     // Every click strikes: up to four bolts share the sky, the oldest makes way. Only the
     // full-screen flash is rate-limited (one per 0.4 s, under the three-flashes-a-second limit),
     // and the automatic lightning holds off for 2 s so it never stacks on top.
@@ -254,12 +288,21 @@ export function Storm() {
       [window, "pointerup", onUp as EventListener],
       [window, "pointercancel", onLeave as EventListener],
       [document, "pointerout", onLeave as EventListener],
+      [window, "touchstart", onTouchStart as EventListener],
+      [window, "touchend", onTouchEnd],
+      [window, "touchcancel", onTouchEnd],
     ];
     for (const [t, type, fn] of listeners) t.addEventListener(type, fn, { passive: true });
+    // These two must be able to cancel: they stop the scroll while the umbrella is held.
+    addEventListener("touchmove", onTouchMove, { passive: false });
+    addEventListener("contextmenu", onContextMenu);
     raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
       for (const [t, type, fn] of listeners) t.removeEventListener(type, fn);
+      removeEventListener("touchmove", onTouchMove);
+      removeEventListener("contextmenu", onContextMenu);
+      clearTimeout(holdTimer);
       delete root.dataset.umbrella;
       lenis?.destroy();
     };

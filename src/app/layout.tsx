@@ -13,7 +13,7 @@ const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
 
 const title = "Bagyo – Scroll Into a Typhoon (WebGL Demo)";
 const description =
-  "A scroll-driven WebGL study: rain bands, a turning cloud spiral and the calm eye of a typhoon, drawn by one fragment shader in Next.js. By Ian Quilatan.";
+  "A scroll-driven WebGL study: rain bands, a turning cloud spiral and the calm eye of a typhoon, drawn by one fragment shader in Next.js. By Ian Joseph Quilatan.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

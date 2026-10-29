@@ -15,6 +15,7 @@ No 3D or animation libraries.
 | Move the pointer | The umbrella leans into the wind; rain leaves a dry patch under it and runs off its edges; fast moves stir the clouds; a hard flick at Signal 4+ turns it inside out | The umbrella folds; the sun leans towards it |
 | Click / tap | Lightning strikes that spot | Birds fly up from that spot |
 | Hold, then release | A charged strike: wider, with a fork | |
+| Phone: hold still, then drag | The umbrella takes your finger and the page stops scrolling until you let go | The same, folded |
 
 ## How it works, in plain words
 
@@ -59,4 +60,4 @@ npm run build
 Social image: `src/app/opengraph-image.jpg`, captured from the running site with
 `portfolio/catalog-video/tmp/typhoon/og.mjs`.
 
-By Ian Quilatan.
+By Ian Joseph Quilatan.

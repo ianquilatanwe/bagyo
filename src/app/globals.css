@@ -97,6 +97,7 @@ main {
 body {
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none; /* no long-press menu on iPhone: a long press is the umbrella */
 }
 
 /* With a mouse or pen, the umbrella replaces the system cursor everywhere, links included
