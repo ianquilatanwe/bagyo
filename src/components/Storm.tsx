@@ -141,12 +141,21 @@ export function Storm() {
     // the finger lifts, to carry the umbrella around a still page; a still hold released is a charged strike.
     const HOLD_MS = 320, SLOP = 10, LIFT = 64;
     let holdTimer = 0, holding = false, dragged = false, touchFrom = [0, 0];
+    // While the page scrolls, Chrome on Android reports the finger only every ~200 ms, so the umbrella
+    // would jump. But during a scroll the finger moves exactly as far as the page does, and the scroll
+    // position is known every frame. So between reports the finger is taken to be where it was last
+    // reported, moved by how far the page has scrolled since. Each new report corrects it.
+    let finger: { x: number; y: number; scroll: number; target: EventTarget | null } | null = null;
+    const trackFinger = (t: Touch, target: EventTarget | null) => {
+      finger = { x: t.clientX, y: t.clientY, scroll: scrollY, target };
+      movePointer(t.clientX, t.clientY - LIFT, target);
+    };
     const onTouchStart = (e: TouchEvent) => {
       clearTimeout(holdTimer);
       holding = dragged = false;
       if (e.touches.length !== 1 || (e.target as Element).closest?.("a, button")) return;
       touchFrom = [e.touches[0].clientX, e.touches[0].clientY];
-      movePointer(touchFrom[0], touchFrom[1] - LIFT, e.target);
+      trackFinger(e.touches[0], e.target);
       holdTimer = window.setTimeout(() => {
         holding = true;
         navigator.vibrate?.(10); // a small tick on phones that support it (not iPhone)
@@ -155,7 +164,7 @@ export function Storm() {
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
-      movePointer(t.clientX, t.clientY - LIFT, e.target);
+      trackFinger(t, e.target);
       const far = Math.hypot(t.clientX - touchFrom[0], t.clientY - touchFrom[1]) > SLOP;
       if (holding) e.preventDefault();
       if (far && !dragged) {
@@ -167,7 +176,10 @@ export function Storm() {
     const onTouchEnd = (e: TouchEvent) => {
       clearTimeout(holdTimer);
       holding = false;
-      if (!e.touches.length) presenceTo = 0;
+      if (!e.touches.length) {
+        presenceTo = 0;
+        finger = null;
+      }
     };
     const onVisibility = () => sound.setVisible(document.visibilityState === "visible");
     // A long press would otherwise open the browser's menu.
@@ -248,6 +260,7 @@ export function Storm() {
 
       // Umbrella: leans into the wind and against your motion, shivers in strong wind, turns inside
       // out on a hard flick at Signal 4 and up, and folds over links and in the eye (no rain there).
+      if (finger) movePointer(finger.x, finger.y - (scrollY - finger.scroll) - LIFT, finger.target);
       const vNow = (px[0] - prevPx[0]) / Math.max(dt, 1e-3), vyNow = (px[1] - prevPx[1]) / Math.max(dt, 1e-3);
       speed = Math.hypot(px[0] - prevPx[0], px[1] - prevPx[1]) / Math.max(dt, 1e-3);
       prevPx = px;
