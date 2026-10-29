@@ -1,5 +1,5 @@
 // The storm's sound, generated in code with the Web Audio API: no audio files to download or license.
-// Off until the visitor turns it on (browsers only allow audio after a click anyway).
+// Nothing is made until the visitor first clicks, taps or presses a key (browsers only allow audio after that).
 //
 // Layers: rain (a stereo hiss bed plus thousands of individual droplet ticks, light and heavy textures
 // crossfaded by the wind), wind (a howl whose pitch drifts, a whistle in gusts, a low body), umbrella

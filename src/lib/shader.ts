@@ -1,5 +1,5 @@
 // One full-screen fragment shader draws the whole storm. We look straight up into it:
-// spiral cloud bands that turn faster near the centre, three layers of slanted rain,
+// spiral cloud bands that turn faster near the centre, two distant layers of slanted rain,
 // and an eye that opens onto clear sky once the wind peaks. uP is scroll progress (0..1).
 
 // A single triangle that covers the screen; no vertex buffer needed.

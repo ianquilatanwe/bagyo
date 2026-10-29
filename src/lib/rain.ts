@@ -155,5 +155,5 @@ export function createRain() {
     ctx.globalAlpha = 1;
   }
 
-  return { step, draw, clear: () => (drops.length = 0) };
+  return { step, draw };
 }

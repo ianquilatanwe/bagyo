@@ -6,7 +6,8 @@ const MIN_KMH = 45;
 const MAX_KMH = 230;
 const EYE_KMH = 12;
 
-const smooth = (a: number, b: number, x: number) => {
+/** Smoothstep: 0 at a, 1 at b, eased in between (the same as GLSL smoothstep). */
+export const smooth = (a: number, b: number, x: number) => {
   const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
   return t * t * (3 - 2 * t);
 };

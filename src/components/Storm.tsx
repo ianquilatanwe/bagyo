@@ -6,14 +6,10 @@ import { releaseBirds } from "@/lib/birds";
 import { createRain } from "@/lib/rain";
 import { createSound } from "@/lib/sound";
 import { FRAG, VERT } from "@/lib/shader";
-import { PEAK, signalFor, windAt } from "@/lib/storm";
+import { PEAK, signalFor, smooth, windAt } from "@/lib/storm";
 
 const BOLTS = 4; // keep in step with BOLTS in shader.ts
 const UMBRELLA_SCALE = 64 / 80; // CSS px per SVG unit: the umbrella SVG is 64 px wide for an 80-unit viewBox
-const smooth = (a: number, b: number, x: number) => {
-  const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
-  return t * t * (3 - 2 * t);
-};
 
 type Strike = { x: number; y: number; top: number; seed: number; age: number; power: number; lit: boolean };
 
@@ -40,6 +36,8 @@ export function Storm() {
     const events = ["pointerup", "keydown"];
     const start = (e: Event) => {
       if ((e.target as Element).closest?.("[data-sound-toggle]")) return; // the button handles itself
+      // Escape and browser shortcuts are keys that don't unlock audio: wait for one that does.
+      if (navigator.userActivation && !navigator.userActivation.isActive) return;
       sound.setEnabled(true);
       setWaiting(false);
     };
@@ -61,12 +59,18 @@ export function Storm() {
     const debug = showDebug(gl, !!program);
     // No WebGL: hide the canvas and let the CSS gradient in globals.css stand in. Gauge and umbrella still work.
     if (!program) root.dataset.nogl = "";
-    canvas.addEventListener("webglcontextlost", () => (root.dataset.nogl = ""));
+    const onContextLost = () => (root.dataset.nogl = "");
     root.dataset.umbrella = "";
+    const still = matchMedia("(prefers-reduced-motion: reduce)");
     // Smooth scrolling: the wheel glides on and settles instead of stopping dead. Lenis still
     // scrolls the real page, so the CSS text fades and the #top link keep working. Phones keep
-    // their own momentum; reduced motion keeps plain scrolling.
-    const lenis = matchMedia("(prefers-reduced-motion: reduce)").matches ? null : new Lenis({ autoRaf: true, anchors: true, lerp: 0.08 });
+    // their own momentum; reduced motion (also if it's turned on mid-visit) keeps plain scrolling.
+    let lenis: Lenis | null = null;
+    const onMotionPref = () => {
+      lenis?.destroy();
+      lenis = still.matches ? null : new Lenis({ autoRaf: true, anchors: true, lerp: 0.08 });
+    };
+    onMotionPref();
 
     const u = (name: string) => gl && program && gl.getUniformLocation(program, name);
     const uRes = u("uRes"), uTime = u("uTime"), uP = u("uP"), uFlash = u("uFlash"), uLook = u("uLook");
@@ -75,17 +79,16 @@ export function Storm() {
     const uBolt = u("uBolt"), uBoltAge = u("uBoltAge");
     const boltData = new Float32Array(BOLTS * 4), ageData = new Float32Array(BOLTS * 3);
 
-    const still = matchMedia("(prefers-reduced-motion: reduce)");
     let target = 0, p = 0, time = 0, flash = 0, nextFlash = 3, lastFlash = -1, look = [0, 0], lookTo = [0, 0];
-    let last = performance.now(), raf = 0, shownSignal = -1, ready = false;
+    let last = performance.now(), raf = 0, shownSignal = -1, shownKmh = -1, ready = false;
     // Scroll speed whips up gusts: they speed the cloud spin and the rain, so both run on their own clocks.
     let prevTarget = 0, gust = 0, spin = 0, rainT = 0, windT = 0;
     // Pointer in the shader's units (centre 0,0, y up, shorter screen side = 1). presence fades the
     // pointer's effects in and out; stir grows with how far it moved recently.
-    let pointer = [0, 0], pointerTo = [0, 0], presence = 0, presenceTo = 0, stir = 0, moved = 0;
+    let pointerTo = [0, 0], presence = 0, presenceTo = 0, stir = 0, moved = 0;
     // The same pointer in CSS pixels for the umbrella element, its sideways speed and lean.
     let px = [0, 0], prevPx = [0, 0], vx = 0, vy = 0, speed = 0, lean = 0, overLink = false;
-    let invertedUntil = 0, state = "";
+    let invertedUntil = 0, state = "", lastScroll = 0;
     // Hold to charge: the strike lands on release, bigger and forked the longer it was held.
     let chargeFrom = -1, charge = 0;
     const strikes: Strike[] = [];
@@ -145,10 +148,21 @@ export function Storm() {
     // would jump. But during a scroll the finger moves exactly as far as the page does, and the scroll
     // position is known every frame. So between reports the finger is taken to be where it was last
     // reported, moved by how far the page has scrolled since. Each new report corrects it.
-    let finger: { x: number; y: number; scroll: number; target: EventTarget | null } | null = null;
+    let finger: { x: number; y: number; scroll: number; time: number; target: EventTarget | null } | null = null;
+    // A sparse report (Android mid-scroll) is a little out of step with the scroll position read with it
+    // (the browser scrolls on its own thread), so snapping to it would make the umbrella jump back or
+    // dash ahead five times a second. Instead the disagreement is kept and eased away over the next
+    // frames, so it glides. Frequent reports (a still page, or a browser that keeps reporting) are trusted.
+    let ease = [0, 0];
     const trackFinger = (t: Touch, target: EventTarget | null) => {
-      finger = { x: t.clientX, y: t.clientY, scroll: scrollY, target };
-      movePointer(t.clientX, t.clientY - LIFT, target);
+      const now = performance.now();
+      if (!finger) ease = [0, 0];
+      else if (scrollY !== finger.scroll && now - finger.time > 100) {
+        // where it was going to be, minus where the report says
+        ease = [finger.x + ease[0] - t.clientX, finger.y - (scrollY - finger.scroll) + ease[1] - t.clientY];
+      }
+      finger = { x: t.clientX, y: t.clientY, scroll: scrollY, time: now, target };
+      movePointer(t.clientX + ease[0], t.clientY - LIFT + ease[1], target);
     };
     const onTouchStart = (e: TouchEvent) => {
       clearTimeout(holdTimer);
@@ -162,7 +176,7 @@ export function Storm() {
       }, HOLD_MS);
     };
     const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
+      if (e.touches.length !== 1 || !finger) return; // !finger: it started on a link or button
       const t = e.touches[0];
       trackFinger(t, e.target);
       const far = Math.hypot(t.clientX - touchFrom[0], t.clientY - touchFrom[1]) > SLOP;
@@ -188,7 +202,7 @@ export function Storm() {
     // Every click strikes: up to four bolts share the sky, the oldest makes way. Only the
     // full-screen flash is rate-limited (one per 0.4 s, under the three-flashes-a-second limit),
     // and the automatic lightning holds off for 2 s so it never stacks on top.
-    const strike = (power: number, [x, y] = pointerTo) => {
+    const strike = (power: number, [x, y]: number[]) => {
       const s: Strike = { x, y, top: x + (Math.random() - 0.5) * 0.6, seed: Math.random() * 100, age: 0, power, lit: false };
       if (strikes.length >= BOLTS) strikes.shift();
       strikes.push(s);
@@ -206,6 +220,7 @@ export function Storm() {
       rainCanvas.width = Math.round(innerWidth * dpr);
       rainCanvas.height = Math.round(innerHeight * dpr);
       rainCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      onScroll(); // the page's scrollable height changed with it
     };
 
     const frame = (now: number) => {
@@ -240,7 +255,6 @@ export function Storm() {
       } else flash = stir = gust = 0;
       prevTarget = target;
       moved = 0;
-      pointer = pointerTo; // not eased: the shader's pointer must stay exactly under the umbrella
       presence += (presenceTo - presence) * (1 - Math.exp(-dt * 4));
       charge += ((chargeFrom >= 0 && inStorm() ? Math.min((time - chargeFrom) / 1.2, 1) : 0) - charge) * k(10);
 
@@ -260,9 +274,15 @@ export function Storm() {
 
       // Umbrella: leans into the wind and against your motion, shivers in strong wind, turns inside
       // out on a hard flick at Signal 4 and up, and folds over links and in the eye (no rain there).
-      if (finger) movePointer(finger.x, finger.y - (scrollY - finger.scroll) - LIFT, finger.target);
+      if (finger) {
+        ease = ease.map((e) => e - e * k(8));
+        movePointer(finger.x + ease[0], finger.y - (scrollY - finger.scroll) - LIFT + ease[1], finger.target);
+      }
       const vNow = (px[0] - prevPx[0]) / Math.max(dt, 1e-3), vyNow = (px[1] - prevPx[1]) / Math.max(dt, 1e-3);
-      speed = Math.hypot(px[0] - prevPx[0], px[1] - prevPx[1]) / Math.max(dt, 1e-3);
+      // A flick is the pointer moving across the page: a finger riding a fast scroll is not one.
+      const carried = finger ? scrollY - lastScroll : 0;
+      lastScroll = scrollY;
+      speed = Math.hypot(px[0] - prevPx[0], px[1] - prevPx[1] + carried) / Math.max(dt, 1e-3);
       prevPx = px;
       vx += (vNow - vx) * k(10);
       vy += (vyNow - vy) * k(10);
@@ -301,7 +321,7 @@ export function Storm() {
         gl.uniform1f(uP, p);
         gl.uniform1f(uFlash, flash);
         gl.uniform2f(uLook, look[0], look[1]);
-        gl.uniform3f(uPointer, pointer[0], pointer[1], presence);
+        gl.uniform3f(uPointer, pointerTo[0], pointerTo[1], presence); // not eased: exactly under the umbrella
         gl.uniform1f(uStir, stir);
         gl.uniform1f(uCharge, charge);
         gl.uniform1f(uSpin, spin);
@@ -318,7 +338,7 @@ export function Storm() {
         document.fonts.ready.then(() => (root.dataset.ready = ""));
       }
 
-      kmhRef.current!.textContent = String(Math.round(kmh));
+      if (Math.round(kmh) !== shownKmh) kmhRef.current!.textContent = String((shownKmh = Math.round(kmh)));
       fillRef.current!.style.transform = `scaleY(${kmh / 230})`;
       const signal = signalFor(kmh);
       if (signal !== shownSignal) {
@@ -344,6 +364,8 @@ export function Storm() {
       [window, "touchend", onTouchEnd as EventListener],
       [window, "touchcancel", onTouchEnd as EventListener],
       [document, "visibilitychange", onVisibility],
+      [canvas, "webglcontextlost", onContextLost],
+      [still, "change", onMotionPref],
     ];
     for (const [t, type, fn] of listeners) t.addEventListener(type, fn, { passive: true });
     // These two must be able to cancel: they stop the scroll while the umbrella is held.
@@ -358,6 +380,7 @@ export function Storm() {
       clearTimeout(holdTimer);
       delete root.dataset.umbrella;
       lenis?.destroy();
+      document.querySelector("[data-debug]")?.remove();
       sound.setEnabled(false);
     };
   }, [sound]);
@@ -455,6 +478,7 @@ let shaderError = "";
 function showDebug(gl: WebGL2RenderingContext | null, ok: boolean) {
   if (!new URLSearchParams(location.search).has("debug")) return null;
   const box = document.createElement("pre");
+  box.dataset.debug = "";
   box.style.cssText =
     "position:fixed;left:8px;top:8px;z-index:60;max-width:calc(100vw - 16px);white-space:pre-wrap;font:11px/1.4 monospace;background:rgb(0 0 0/.75);color:#9f9;padding:8px;border-radius:6px;pointer-events:none";
   document.body.append(box);
