@@ -43,7 +43,9 @@ No 3D or animation libraries.
 
 ## Sound
 
-Off until you press **Sound** (top right). Everything is generated in code with the Web Audio API
+On by default. Browsers only allow audio after you click, tap or press a key (scrolling does not
+count), so it starts on your first click anywhere; until then the **Sound** button (top right) says
+"Click for sound", and it turns sound off and on after that. Everything is generated in code with the Web Audio API
 (`src/lib/sound.ts`), so there are no audio files:
 
 - **Rain:** a stereo hiss bed plus thousands of individual droplet ticks; a heavier texture takes over

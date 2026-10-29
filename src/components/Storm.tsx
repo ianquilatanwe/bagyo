@@ -28,7 +28,26 @@ export function Storm() {
   const umbrellaRef = useRef<HTMLDivElement>(null);
   const birdsRef = useRef<HTMLDivElement>(null);
   const [sound] = useState(createSound);
-  const [soundOn, setSoundOn] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
+  // Sound is on by default, but browsers only allow audio after the visitor clicks, taps or presses a
+  // key (scrolling doesn't count). So it starts on the first of those, anywhere on the page, and until
+  // then the button says so. No AudioContext is made before that, which also keeps the console clean.
+  const [waiting, setWaiting] = useState(true);
+  useEffect(() => {
+    if (!waiting || !soundOn) return;
+    // pointerup (not pointerdown): on touch screens only the lift counts as a click for audio, and a
+    // swipe that scrolls ends in pointercancel instead, so scrolling never starts the sound.
+    const events = ["pointerup", "keydown"];
+    const start = (e: Event) => {
+      if ((e.target as Element).closest?.("[data-sound-toggle]")) return; // the button handles itself
+      sound.setEnabled(true);
+      setWaiting(false);
+    };
+    for (const type of events) addEventListener(type, start, { capture: true });
+    return () => {
+      for (const type of events) removeEventListener(type, start, { capture: true });
+    };
+  }, [waiting, soundOn, sound]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -329,15 +348,26 @@ export function Storm() {
       <Umbrella ref={umbrellaRef} />
       <button
         type="button"
-        aria-pressed={soundOn}
+        data-sound-toggle
+        aria-pressed={soundOn && !waiting}
         onClick={() => {
-          sound.setEnabled(!soundOn);
-          setSoundOn(!soundOn);
+          // While waiting, pressing the button is the click that starts the sound, not one that stops it.
+          const on = waiting || !soundOn;
+          sound.setEnabled(on);
+          setSoundOn(on);
+          setWaiting(false);
         }}
         className="fixed right-4 top-4 z-40 flex min-h-11 items-center gap-2 rounded-full bg-ink/55 px-4 font-mono text-xs uppercase tracking-widest text-foam backdrop-blur-md transition-colors hover:bg-ink/75 sm:right-6 sm:top-6"
       >
         <SoundIcon on={soundOn} />
-        Sound {soundOn ? "on" : "off"}
+        {waiting && soundOn ? (
+          <>
+            <span className="pointer-coarse:hidden">Click for sound</span>
+            <span className="hidden pointer-coarse:inline">Tap for sound</span>
+          </>
+        ) : (
+          `Sound ${soundOn ? "on" : "off"}`
+        )}
       </button>
       {/* Decorative read-out: the same signal is named in each section's heading. */}
       <div
