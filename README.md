@@ -47,7 +47,8 @@ Off until you press **Sound** (top right). Everything is generated in code with 
 (`src/lib/sound.ts`), so there are no audio files: rain is filtered noise that follows the same amount
 as the rain on screen (it fades to silence as the eye opens and stays silent to the end), a low wind
 rumble rises with the storm and with scroll gusts, drops patter on the umbrella while they hit it,
-clicked strikes crack and rumble (bigger when charged), the background lightning gives distant
+clicked strikes get one of three kinds of thunder (crack-boom, roller or deep boom; bigger when
+charged), the background lightning gives distant
 thunder a second or two later, and released birds chirp. It pauses while the tab is hidden.
 
 ## Accessibility and safety

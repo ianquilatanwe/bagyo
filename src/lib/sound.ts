@@ -76,33 +76,50 @@ export function createSound() {
       ramp(patterGain.gain, Math.min(hitsPerSecond / 400, 1) * 0.22, 0.08);
     },
 
-    /** A strike: near ones crack then rumble; far ones (the sheet lightning) only rumble, a while later. */
+    /** Thunder for a strike, one of three kinds at random; far (the sheet lightning) is a quiet,
+     *  delayed roll. All of it is low rumble: no high crack, which sounded like a hit on the umbrella. */
     thunder(power: number, far: boolean) {
       if (!ctx || !enabled) return;
-      const t = ctx.currentTime + (far ? 0.8 + Math.random() * 1.4 : 0.03 + Math.random() * 0.12);
-      if (!far) {
-        const crack = ctx.createBufferSource();
-        crack.buffer = white;
-        const g = gain();
-        crack.connect(filter("highpass", 900)).connect(g).connect(master);
-        g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(0.5 + 0.3 * power, t + 0.006);
-        g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
-        crack.start(t, Math.random() * 2);
-        crack.stop(t + 0.35);
-      }
-      const rumble = ctx.createBufferSource();
-      rumble.buffer = brown;
-      rumble.loop = true;
+      const t = ctx.currentTime + (far ? 0.8 + Math.random() * 1.4 : 0.03 + Math.random() * 0.1);
+      const kind = far ? 1 : Math.floor(Math.random() * 3);
+      const loud = (far ? 0.35 : 0.85) * (0.6 + 0.4 * power);
+      const src = ctx.createBufferSource();
+      src.buffer = brown;
+      src.loop = true;
+      const tone = filter("lowpass", 200);
       const g = gain();
-      rumble.connect(filter("lowpass", far ? 140 : 220)).connect(g).connect(master);
-      const peak = (far ? 0.35 : 0.8) * (0.6 + 0.4 * power);
-      const length = 2.2 + 1.8 * power + (far ? 1 : 0);
+      src.connect(tone).connect(g).connect(master);
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(peak, t + (far ? 0.4 : 0.08));
-      g.gain.setTargetAtTime(0, t + 0.3, length / 4);
-      rumble.start(t, Math.random() * 3);
-      rumble.stop(t + length + 1);
+      let length: number;
+      if (kind === 0) {
+        // Crack-boom: hits fast, and the filter closes as it rolls, so it goes from bright to dark.
+        length = 2.5 + 1.5 * power;
+        tone.frequency.setValueAtTime(900, t);
+        tone.frequency.exponentialRampToValueAtTime(130, t + 1.4);
+        g.gain.linearRampToValueAtTime(loud, t + 0.02);
+        g.gain.setTargetAtTime(0, t + 0.15, length / 5);
+      } else if (kind === 1) {
+        // Roller: a few uneven swells, each a little quieter, like thunder echoing off cloud.
+        length = (far ? 4 : 3.5) + 1.5 * power;
+        tone.frequency.setValueAtTime(far ? 130 : 240, t);
+        const swells = 3 + Math.floor(Math.random() * 3);
+        const segment = (length * 0.8) / swells; // swells back to back, so the ramps stay in time order
+        for (let i = 0; i < swells; i++) {
+          const at = t + i * segment;
+          const peak = loud * (1 - (i / swells) * 0.6) * (0.6 + 0.4 * Math.random());
+          g.gain.linearRampToValueAtTime(peak, at + Math.min(0.12, segment * 0.4));
+          g.gain.linearRampToValueAtTime(peak * 0.35, at + segment);
+        }
+        g.gain.setTargetAtTime(0, t + length * 0.85, 0.4);
+      } else {
+        // Deep boom: one heavy, very low swell with a long tail.
+        length = 3.5 + 2 * power;
+        tone.frequency.setValueAtTime(95, t);
+        g.gain.linearRampToValueAtTime(loud * 1.3, t + 0.18);
+        g.gain.setTargetAtTime(0, t + 0.4, length / 4);
+      }
+      src.start(t, Math.random() * 3);
+      src.stop(t + length + 1.5);
     },
 
     /** Birds taking off: each gives two or three quick rising whistles. */
