@@ -16,7 +16,7 @@ No 3D or animation libraries.
 | Click / tap | Lightning strikes that spot | Birds fly up from that spot |
 | Hold, then release | A charged strike: wider, with a fork | |
 | Phone: drag | The umbrella follows your finger, just above it; up-and-down drags still scroll | The same, folded |
-| Phone: hold still, then drag | The same, but the page stops scrolling until you let go | |
+| Phone: hold still then drag, or start the drag sideways or on a slant | The same, but the page stops scrolling until you let go, and the umbrella sits exactly under your finger | |
 
 ## How it works, in plain words
 

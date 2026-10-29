@@ -115,6 +115,15 @@ body {
   }
 }
 
+/* With the umbrella on, a touch drag scrolls only if it sets off more up-and-down than sideways; one
+   that sets off sideways or on a slant is playing with the umbrella, and the page stays put until the
+   finger lifts (the browser decides this itself, the moment the drag starts). With no scroll, the
+   browser keeps reporting the finger every frame, so the umbrella sits exactly over it. Pinch zoom
+   still works. */
+html[data-umbrella] body {
+  touch-action: pan-y pinch-zoom;
+}
+
 /* Umbrella states, set by Storm.tsx. transform-box lets the origins use the SVG's own units:
    (0,-22) is the canopy tip, (0,4) its rim. */
 .umbrella-canopy {

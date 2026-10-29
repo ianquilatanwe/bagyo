@@ -142,6 +142,7 @@ export function Storm() {
     // events keep reporting the finger during a scroll, pointer events don't. Moving at all drops the
     // charge, so only a tap strikes. Hold still for a moment first and the page stops scrolling until
     // the finger lifts, to carry the umbrella around a still page; a still hold released is a charged strike.
+    // (A drag that sets off sideways or on a slant never scrolls either: touch-action in globals.css.)
     const HOLD_MS = 320, SLOP = 10, LIFT = 64;
     let holdTimer = 0, holding = false, dragged = false, touchFrom = [0, 0];
     // While the page scrolls, Chrome on Android reports the finger only every ~200 ms, so the umbrella
