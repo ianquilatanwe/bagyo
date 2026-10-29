@@ -30,6 +30,9 @@ No 3D or animation libraries.
 - **Lightning behaves like lightning.** A dim leader steps down from the cloud, the bright return
   stroke fires when it lands, two weaker re-strikes follow down the same channel, and it fades
   through a violet afterglow. You can click as fast as you like; up to four bolts share the sky.
+- **Exact on phone GPUs.** The shader's random numbers use integer maths and the cloud spin angle is
+  kept within one turn, because phone GPUs round large or tiny float values differently from desktops
+  (that showed as blocky clouds). The bolt is drawn by distance across it, so steep zigzags stay solid.
 - **The umbrella really blocks the rain.** The near rain is particles (`src/lib/rain.ts`): drops that
   hit the canopy stop and splash, their water runs to the rim and drips off, and the wind carries the
   drips onto the rain's slant. The shader only draws the distant rain behind.
@@ -37,6 +40,15 @@ No 3D or animation libraries.
   so a change of wind (scrolling) changes where drops go next without sliding the ones already falling.
 - **Smooth scrolling.** Lenis lets the wheel glide on and settle. The page still scrolls for real, so
   CSS scroll animations and the back-to-top link work; phones keep their own momentum.
+
+## Sound
+
+Off until you press **Sound** (top right). Everything is generated in code with the Web Audio API
+(`src/lib/sound.ts`), so there are no audio files: rain is filtered noise that follows the same amount
+as the rain on screen (it fades to silence as the eye opens and stays silent to the end), a low wind
+rumble rises with the storm and with scroll gusts, drops patter on the umbrella while they hit it,
+clicked strikes crack and rumble (bigger when charged), the background lightning gives distant
+thunder a second or two later, and released birds chirp. It pauses while the tab is hidden.
 
 ## Accessibility and safety
 

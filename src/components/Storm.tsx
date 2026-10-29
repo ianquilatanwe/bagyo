@@ -1,9 +1,10 @@
 "use client";
 
 import Lenis from "lenis";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { releaseBirds } from "@/lib/birds";
 import { createRain } from "@/lib/rain";
+import { createSound } from "@/lib/sound";
 import { FRAG, VERT } from "@/lib/shader";
 import { PEAK, signalFor, windAt } from "@/lib/storm";
 
@@ -26,6 +27,8 @@ export function Storm() {
   const fillRef = useRef<HTMLDivElement>(null);
   const umbrellaRef = useRef<HTMLDivElement>(null);
   const birdsRef = useRef<HTMLDivElement>(null);
+  const [sound] = useState(createSound);
+  const [soundOn, setSoundOn] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -104,7 +107,7 @@ export function Storm() {
       onLeave(e);
       if (held < 0) return;
       if (inStorm()) strike(Math.min(held / 1.2, 1));
-      else if (inEye()) releaseBirds(birdsRef.current!, e.clientX, e.clientY);
+      else if (inEye()) sound.birds(releaseBirds(birdsRef.current!, e.clientX, e.clientY));
     };
 
     // Touch: hold still for a moment and the umbrella takes the finger. From then until the finger
@@ -180,7 +183,8 @@ export function Storm() {
       if (!calm) {
         time += dt;
         gust += (Math.min((Math.abs(target - prevTarget) / Math.max(dt, 1e-3)) * 1.2, 1) - gust) * (1 - Math.exp(-dt * 3));
-        spin += dt * (0.04 + 0.22 * windS + 0.6 * gust);
+        // An angle: wrap at a full turn so it stays small (same rotation, exact on phone GPUs).
+        spin = (spin + dt * (0.04 + 0.22 * windS + 0.6 * gust)) % (Math.PI * 2);
         rainT += dt * (1 + 1.5 * gust);
         windT += dt * (1 + 1.5 * gust) * slantNow;
         look = look.map((l, i) => l + (lookTo[i] - l) * k(3));
@@ -188,6 +192,7 @@ export function Storm() {
         if (time > nextFlash && p > 0.1 && p < PEAK + 0.05 && time - lastFlash > 0.4) {
           flash = 0.6 + Math.random() * 0.4;
           lastFlash = time;
+          sound.thunder(0.3, true);
           nextFlash = time + 2.5 + Math.random() * 4;
         }
         flash *= Math.exp(-dt * 7);
@@ -204,6 +209,7 @@ export function Storm() {
         s.age += dt;
         if (!s.lit && s.age >= 0.09) {
           s.lit = true;
+          sound.thunder(s.power, false);
           if (time - lastFlash > 0.4) {
             flash = Math.max(flash, 0.25 + 0.25 * s.power);
             lastFlash = time;
@@ -231,12 +237,16 @@ export function Storm() {
       // Near rain, blocked by the umbrella exactly as it is drawn this frame. Same density and wind
       // as the shader's distant rain (keep the two formulas in step with shader.ts).
       rainCtx.clearRect(0, 0, innerWidth, innerHeight);
+      const amount = (0.35 + 0.65 * smooth(0, 0.6, p)) * (1 - smooth(0.58, 0.72, p));
+      let hits = 0;
       if (!calm) {
-        const amount = (0.35 + 0.65 * smooth(0, 0.6, p)) * (1 - smooth(0.58, 0.72, p));
         const blocking = state === "open" && presence > 0.5;
-        rain.step(dt, innerWidth, innerHeight, amount, slantNow, { x: px[0], y: px[1], angle: (lean * Math.PI) / 180, scale: UMBRELLA_SCALE, blocking, vx, vy });
+        hits = rain.step(dt, innerWidth, innerHeight, amount, slantNow, { x: px[0], y: px[1], angle: (lean * Math.PI) / 180, scale: UMBRELLA_SCALE, blocking, vx, vy });
         rain.draw(rainCtx);
       }
+      // The rain's sound follows the same amount as the rain on screen, so it fades out with it as
+      // the eye opens and stays silent to the end of the page.
+      sound.update(amount, windS, gust, hits / Math.max(dt, 1e-3));
 
       if (gl && program) {
         boltData.fill(0);
@@ -291,6 +301,7 @@ export function Storm() {
       [window, "touchstart", onTouchStart as EventListener],
       [window, "touchend", onTouchEnd],
       [window, "touchcancel", onTouchEnd],
+      [document, "visibilitychange", sound.onVisibility],
     ];
     for (const [t, type, fn] of listeners) t.addEventListener(type, fn, { passive: true });
     // These two must be able to cancel: they stop the scroll while the umbrella is held.
@@ -305,8 +316,9 @@ export function Storm() {
       clearTimeout(holdTimer);
       delete root.dataset.umbrella;
       lenis?.destroy();
+      sound.setEnabled(false);
     };
-  }, []);
+  }, [sound]);
 
   return (
     <>
@@ -314,6 +326,18 @@ export function Storm() {
       <canvas ref={rainRef} aria-hidden className="pointer-events-none fixed inset-0 -z-[5] h-full w-full" />
       <div ref={birdsRef} aria-hidden className="pointer-events-none fixed inset-0 z-20 overflow-hidden" />
       <Umbrella ref={umbrellaRef} />
+      <button
+        type="button"
+        aria-pressed={soundOn}
+        onClick={() => {
+          sound.setEnabled(!soundOn);
+          setSoundOn(!soundOn);
+        }}
+        className="fixed right-4 top-4 z-40 flex min-h-11 items-center gap-2 rounded-full bg-ink/55 px-4 font-mono text-xs uppercase tracking-widest text-foam backdrop-blur-md transition-colors hover:bg-ink/75 sm:right-6 sm:top-6"
+      >
+        <SoundIcon on={soundOn} />
+        Sound {soundOn ? "on" : "off"}
+      </button>
       {/* Decorative read-out: the same signal is named in each section's heading. */}
       <div
         aria-hidden
@@ -359,6 +383,15 @@ function Umbrella({ ref }: { ref: React.Ref<HTMLDivElement> }) {
         <path d="M0 -22 V-27 M0 4 V24 Q0 29 -4.5 29 Q-8 29 -8 25.5" strokeWidth="1.5" />
       </svg>
     </div>
+  );
+}
+
+function SoundIcon({ on }: { on: boolean }) {
+  return (
+    <svg aria-hidden viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 8v4h3l4 3.5v-11L6 8z" />
+      {on ? <path d="M13 7.5a3.5 3.5 0 0 1 0 5M15.5 5a7 7 0 0 1 0 10" /> : <path d="M13.5 8l4 4M17.5 8l-4 4" />}
+    </svg>
   );
 }
 

@@ -22,16 +22,24 @@ uniform float uStir;   // 0..1, how hard the pointer has been moving
 uniform vec4 uBolt[BOLTS];    // per strike: point xy, x where it leaves the top, zigzag seed
 uniform vec3 uBoltAge[BOLTS]; // per strike: seconds since the click, charge 0..1 (bigger, forked), 1 if in use
 uniform float uCharge; // 0..1 while the pointer is held down, before the strike
-uniform float uSpin;   // cloud spin phase, so scroll gusts can speed it up without jumps
+uniform float uSpin;   // cloud spin angle, 0..2π (kept small: phone GPUs lose sin/cos accuracy on big angles)
 uniform float uRainT;  // rain fall clock, also sped up by gusts
 uniform float uWindT;  // how far the wind has carried the rain: the sum of slant × fall clock
 uniform float uGust;   // 0..1, how fast the page is being scrolled
 out vec4 outColor;
 
+// Random value 0..1 for a grid cell. Integer maths (the pcg2d hash), so it is exact on every GPU;
+// the usual fract(sin(...))-style float hashes lose precision on phone GPUs and turn noise blocky.
 float hash(vec2 p) {
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
+  uvec2 v = uvec2(ivec2(floor(p)));
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * 1664525u;
+  v.y += v.x * 1664525u;
+  v ^= v >> 16u;
+  v.x += v.y * 1664525u;
+  v.y += v.x * 1664525u;
+  v ^= v >> 16u;
+  return float(v.x ^ v.y) / 4294967295.0;
 }
 
 float noise(vec2 p) {
@@ -76,9 +84,17 @@ float zig(float y, float seed) {
 
 // One jagged lightning segment from a (bottom) up to b (top). The zigzag is pinned to zero at both
 // ends so the bolt always lands exactly at a. width < 1 thins the core.
+float boltX(float y, vec2 a, vec2 b, float seed) {
+  float t = clamp((y - a.y) / (b.y - a.y), 0.0, 1.0);
+  return mix(a.x, b.x, t) + zig(y, seed) * sin(t * 3.1416);
+}
+
 float boltSeg(vec2 uv, vec2 a, vec2 b, float seed, float width) {
-  float t = clamp((uv.y - a.y) / (b.y - a.y), 0.0, 1.0);
-  float d = abs(uv.x - mix(a.x, b.x, t) - zig(uv.y, seed) * sin(t * 3.1416));
+  // Distance measured across the bolt, not just sideways: where the zigzag runs steeply sideways,
+  // sideways distance jumps between pixel rows and leaves the bolt in broken horizontal slices.
+  float x = boltX(uv.y, a, b, seed);
+  float slope = (boltX(uv.y + 0.002, a, b, seed) - x) / 0.002;
+  float d = abs(uv.x - x) / sqrt(1.0 + slope * slope);
   // Fade out just past each end (a hard cut shows as a line).
   float inside = smoothstep(-0.03, 0.01, uv.y - a.y) * smoothstep(0.01, -0.01, uv.y - b.y);
   return inside * (exp(-d * 260.0 / width) + 0.35 * width * exp(-d * 30.0));
@@ -199,7 +215,7 @@ void main() {
 
   // Sheets of spray blowing across at the peak.
   float spray = (wind * 0.3 + uGust * 0.25 * (1.0 - eye));
-  col = mix(col, vec3(0.35, 0.42, 0.44), spray * fbm(uv * vec2(0.8, 3.0) + vec2(uSpin * 4.0, 0.0)));
+  col = mix(col, vec3(0.35, 0.42, 0.44), spray * fbm(uv * vec2(0.8, 3.0) + vec2(uWindT * 0.6, 0.0)));
 
   col *= 1.0 - 0.45 * smoothstep(0.5, 1.3, length(uv));
   col += (hash(gl_FragCoord.xy + fract(uTime) * 100.0) - 0.5) * 0.035;

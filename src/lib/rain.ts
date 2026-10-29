@@ -49,8 +49,10 @@ export function createRain() {
   const drops: Drop[] = [];
   const water = [0, 0]; // collected on the left and right halves of the canopy
 
-  /** amount 0..1 sets the density; slant is the wind (sideways px per px fallen). */
+  /** amount 0..1 sets the density; slant is the wind (sideways px per px fallen). Returns how many
+   *  drops hit the umbrella this step (for the patter sound). */
   function step(dt: number, w: number, h: number, amount: number, slant: number, c: Canopy) {
+    let hits = 0;
     const target = Math.round((amount * w * h) / 1300);
     let rain = 0;
     for (const d of drops) if (d.kind === RAIN) rain++;
@@ -82,6 +84,7 @@ export function createRain() {
         let side = 0;
         if (c.blocking) for (let s = 1; s <= 3 && !side; s++) side = canopyHit(c, d.x + (nx - d.x) * (s / 3), d.y + (ny - d.y) * (s / 3));
         if (side) {
+          hits++;
           water[side < 0 ? 0 : 1]++;
           const hx = d.x + (nx - d.x) * 0.5, hy = d.y + (ny - d.y) * 0.5;
           for (let k = Math.random() < 0.5 ? 1 : 2; k > 0; k--)
@@ -114,6 +117,7 @@ export function createRain() {
           drops.push({ kind: DRIP, x, y, vx: c.vx * 0.5 + side * 15, vy: 40 + Math.max(c.vy, 0) * 0.5, depth: 1, life: 3 });
         }
       }
+    return hits;
   }
 
   function draw(ctx: CanvasRenderingContext2D) {

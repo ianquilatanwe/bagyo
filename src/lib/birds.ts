@@ -4,6 +4,7 @@
 
 const MAX_BIRDS = 36;
 
+/** Returns how many birds took off (for the sound). */
 export function releaseBirds(layer: HTMLElement, x: number, y: number) {
   const count = Math.min(5 + Math.floor(Math.random() * 3), MAX_BIRDS - layer.childElementCount);
   for (let i = 0; i < count; i++) {
@@ -35,4 +36,5 @@ export function releaseBirds(layer: HTMLElement, x: number, y: number) {
       )
       .finished.then(() => bird.remove());
   }
+  return count;
 }
