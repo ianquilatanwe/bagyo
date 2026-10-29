@@ -22,16 +22,49 @@ export function Storm() {
 
     const u = (name: string) => gl && program && gl.getUniformLocation(program, name);
     const uRes = u("uRes"), uTime = u("uTime"), uP = u("uP"), uFlash = u("uFlash"), uLook = u("uLook");
+    const uPointer = u("uPointer"), uStir = u("uStir"), uBolt = u("uBolt"), uBoltT = u("uBoltT");
 
     const still = matchMedia("(prefers-reduced-motion: reduce)");
     let target = 0, p = 0, time = 0, flash = 0, nextFlash = 3, look = [0, 0], lookTo = [0, 0];
     let last = performance.now(), raf = 0, shownSignal = -1;
+    // Pointer in the shader's units (centre 0,0, y up, shorter screen side = 1). presence fades the
+    // cursor's effects in and out; stir grows with how far the pointer moved recently.
+    let pointer = [0, 0], pointerTo = [0, 0], presence = 0, presenceTo = 0, stir = 0, moved = 0;
+    // Click-to-strike: [x, y, x where the bolt leaves the top of the screen, random seed for its zigzag].
+    let bolt = [0, 0, 0, 0], boltT = 0, nextStrike = 0;
 
+    const toShader = (x: number, y: number) => {
+      const m = Math.min(innerWidth, innerHeight);
+      return [(x - innerWidth / 2) / m, (innerHeight / 2 - y) / m];
+    };
     const onScroll = () => {
       const max = document.documentElement.scrollHeight - innerHeight;
       target = max > 0 ? Math.min(scrollY / max, 1) : 0;
     };
-    const onPointer = (e: PointerEvent) => (lookTo = [e.clientX / innerWidth - 0.5, 0.5 - e.clientY / innerHeight]);
+    const onPointer = (e: PointerEvent) => {
+      lookTo = [e.clientX / innerWidth - 0.5, 0.5 - e.clientY / innerHeight];
+      const next = toShader(e.clientX, e.clientY);
+      if (presenceTo) moved += Math.hypot(next[0] - pointerTo[0], next[1] - pointerTo[1]);
+      pointerTo = next;
+      presenceTo = 1;
+    };
+    // Touch has no hover: the umbrella only shows while a finger is down.
+    const onLeave = (e: PointerEvent) => {
+      if (e.type === "pointerout" ? !e.relatedTarget : e.pointerType !== "mouse") presenceTo = 0;
+    };
+    const onDown = (e: PointerEvent) => {
+      onPointer(e);
+      // Strikes only during the storm, not on links, at most one every 0.6 s; together with the
+      // automatic lightning (held off for 2 s after) that stays under three flashes a second.
+      if (still.matches || p > PEAK + 0.08 || time < nextStrike) return;
+      if ((e.target as Element).closest("a, button")) return;
+      const [x, y] = pointerTo;
+      bolt = [x, y, x + (Math.random() - 0.5) * 0.6, Math.random() * 100];
+      boltT = 1;
+      flash = Math.max(flash, 0.3);
+      nextStrike = time + 0.6;
+      nextFlash = Math.max(nextFlash, time + 2);
+    };
     // Clouds are soft, so the canvas renders at ~60% of screen pixels and CSS scales it up.
     const onResize = () => {
       const scale = Math.min(devicePixelRatio, 2) * 0.6;
@@ -57,7 +90,13 @@ export function Storm() {
           nextFlash = time + 2.5 + Math.random() * 4;
         }
         flash *= Math.exp(-dt * 7);
-      } else flash = 0;
+        boltT *= Math.exp(-dt * 6);
+        stir = Math.min(stir * Math.exp(-dt * 1.5) + moved * 1.5, 1);
+      } else flash = boltT = stir = 0;
+      moved = 0;
+      const ease = calm ? 1 : 1 - Math.exp(-dt * 8);
+      pointer = pointer.map((v, i) => v + (pointerTo[i] - v) * ease);
+      presence += (presenceTo - presence) * (1 - Math.exp(-dt * 4));
 
       if (gl && program) {
         gl.uniform2f(uRes, canvas.width, canvas.height);
@@ -65,6 +104,10 @@ export function Storm() {
         gl.uniform1f(uP, p);
         gl.uniform1f(uFlash, flash);
         gl.uniform2f(uLook, look[0], look[1]);
+        gl.uniform3f(uPointer, pointer[0], pointer[1], presence);
+        gl.uniform1f(uStir, stir);
+        gl.uniform4f(uBolt, bolt[0], bolt[1], bolt[2], bolt[3]);
+        gl.uniform1f(uBoltT, boltT);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
 
@@ -85,12 +128,20 @@ export function Storm() {
     addEventListener("scroll", onScroll, { passive: true });
     addEventListener("resize", onResize);
     addEventListener("pointermove", onPointer);
+    addEventListener("pointerdown", onDown);
+    addEventListener("pointerup", onLeave);
+    addEventListener("pointercancel", onLeave);
+    document.addEventListener("pointerout", onLeave);
     raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
       removeEventListener("scroll", onScroll);
       removeEventListener("resize", onResize);
       removeEventListener("pointermove", onPointer);
+      removeEventListener("pointerdown", onDown);
+      removeEventListener("pointerup", onLeave);
+      removeEventListener("pointercancel", onLeave);
+      document.removeEventListener("pointerout", onLeave);
     };
   }, []);
 

@@ -19,7 +19,7 @@ export default function Home() {
             <h1 className="font-display text-[clamp(6rem,24vw,20rem)] font-black uppercase leading-[0.8] tracking-tight">
               Bagyo
             </h1>
-            <p className="mt-6 text-sm text-squall">Scroll into it.</p>
+            <p className="mt-6 text-sm text-squall">Scroll into it. Move to stir it. Click to call the lightning.</p>
           </div>
         </section>
 
