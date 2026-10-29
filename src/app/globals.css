@@ -4,7 +4,6 @@
 @theme {
   --color-ink: #0b1418; /* dark text in the eye, gauge backdrop */
   --color-foam: #eef4f2; /* light text over the storm */
-  --color-squall: #9fb3b0; /* secondary text over the storm */
   --color-sun: #ffd79a; /* focus ring, accents */
 }
 
@@ -31,14 +30,30 @@ html[data-nogl] body {
   background: linear-gradient(#1a2229 0%, #22302c 55%, #6a9cc8 80%, #ffe1a8 100%);
 }
 
-/* Over the storm the text needs a soft shadow: the clouds behind it keep moving. */
+/* Over the storm the text needs help: clouds, rain and lightning keep moving behind it. A soft dark
+   pool behind each text block plus a shadow keeps small text above 4.5:1 even over bright rain. */
 .over-storm {
+  position: relative;
   text-shadow: 0 2px 24px rgb(0 0 0 / 0.55);
 }
+/* The pool reaches past the text, so keep it from widening the page on phones. */
+main {
+  overflow-x: clip;
+}
+.over-storm::before {
+  content: "";
+  position: absolute;
+  inset: -4rem -5rem;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgb(8 12 14 / 0.6), rgb(8 12 14 / 0.35) 60%, transparent);
+  pointer-events: none;
+}
 
+/* Two rings, light inside dark, so focus shows on both the storm and the bright eye. */
 :focus-visible {
-  outline: 3px solid var(--color-sun);
-  outline-offset: 3px;
+  outline: 2px solid var(--color-foam);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--color-ink);
 }
 
 /* Each section's text drifts up out of blur and back into it as the section crosses the screen.
@@ -75,4 +90,97 @@ html[data-nogl] body {
 /* Dark text inside the eye: a soft light halo keeps it readable if it ever sits on cloud. */
 .in-eye {
   text-shadow: 0 0 18px rgb(220 235 250 / 0.7);
+}
+
+/* The page is a scene, not a document to copy from: no text selection (also stops a quick
+   double-click strike from highlighting a heading). */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* With a mouse or pen, the umbrella replaces the system cursor everywhere, links included
+   (it folds over them). Touch keeps its normal behaviour. */
+@media (pointer: fine) {
+  html[data-umbrella],
+  html[data-umbrella] * {
+    cursor: none;
+  }
+}
+
+/* Umbrella states, set by Storm.tsx. transform-box lets the origins use the SVG's own units:
+   (0,-22) is the canopy tip, (0,4) its rim. */
+.umbrella-canopy {
+  transform-box: view-box;
+  transform-origin: 0 4px;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.umbrella[data-state="folded"] .umbrella-canopy {
+  transform-origin: 0 -22px;
+  transform: scale(0.18, 1.15);
+}
+.umbrella[data-state="inverted"] .umbrella-canopy {
+  transform: scale(1.15, -0.85) skewX(-12deg);
+  transition-duration: 0.12s;
+}
+/* White + difference: light over the dark storm, dark over the bright eye. It turns about the
+   pointer itself (the canopy centre), the same point the rain collides against. */
+.umbrella {
+  mix-blend-mode: difference;
+  transform-origin: 0 0;
+}
+/* Holding the button down fills the ring round the canopy, like the gauge filling. */
+.umbrella-charge {
+  stroke-dasharray: 1;
+  stroke-dashoffset: calc(1 - var(--charge, 0));
+  opacity: calc(var(--charge, 0) * 4);
+}
+
+/* Birds released in the eye: the wings beat by squashing the "v" up and down. */
+.bird {
+  position: absolute;
+  left: -15px;
+  top: -7px;
+}
+.bird path {
+  fill: none;
+  stroke: var(--color-ink);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  transform-box: view-box;
+  transform-origin: 0 0;
+  animation: flap ease-in-out infinite alternate;
+}
+@keyframes flap {
+  to {
+    transform: scaleY(-0.6);
+  }
+}
+
+/* Loader: the cyclone symbol turning over the storm colour until the first frame and the fonts
+   are ready. If the script never runs, it fades out by itself after 4 s. */
+.loader {
+  animation: loader-out 0.5s ease 4s forwards;
+}
+html[data-ready] .loader {
+  animation: loader-out 0.6s ease 0.2s forwards;
+}
+@keyframes loader-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+.loader svg {
+  animation: spin 1.6s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loader svg {
+    animation: none;
+  }
 }

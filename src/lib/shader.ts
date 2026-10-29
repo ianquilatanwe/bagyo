@@ -18,8 +18,13 @@ uniform float uFlash;
 uniform vec2 uLook;
 uniform vec3 uPointer; // xy in the same units as uv, z = 0..1 how present the cursor is
 uniform float uStir;   // 0..1, how hard the pointer has been moving
-uniform vec4 uBolt;    // strike point xy, x where the bolt leaves the top, zigzag seed
-uniform float uBoltT;  // 1 at the strike, fading to 0
+#define BOLTS 4
+uniform vec4 uBolt[BOLTS];    // per strike: point xy, x where it leaves the top, zigzag seed
+uniform vec3 uBoltAge[BOLTS]; // per strike: seconds since the click, charge 0..1 (bigger, forked), 1 if in use
+uniform float uCharge; // 0..1 while the pointer is held down, before the strike
+uniform float uSpin;   // cloud spin phase, so scroll gusts can speed it up without jumps
+uniform float uRainT;  // rain fall clock, also sped up by gusts
+uniform float uGust;   // 0..1, how fast the page is being scrolled
 out vec4 outColor;
 
 float hash(vec2 p) {
@@ -48,23 +53,70 @@ mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 float rain(vec2 uv, float cols, float speed, float slant, float len) {
   uv.x += uv.y * slant;
   float col = floor(uv.x * cols);
-  float y = uv.y * cols * 0.12 + uTime * speed + hash(vec2(col, 7.0)) * 20.0;
+  float y = uv.y * cols * 0.12 + uRainT * speed + hash(vec2(col, 7.0)) * 20.0;
   float cell = floor(y), f = fract(y);
   float x = fract(uv.x * cols) - (0.2 + 0.6 * hash(vec2(cell, col)));
   return smoothstep(len, 0.0, f) * smoothstep(0.12, 0.0, abs(x)) * step(0.55, hash(vec2(col, cell)));
 }
 
-// A lightning bolt from the top of the screen down to the clicked point. Its zigzag is two
-// octaves of noise, pinned to zero at both ends so it always lands where you clicked.
-float bolt(vec2 uv) {
-  float top = 0.5 * uRes.y / min(uRes.x, uRes.y) + 0.05;
-  float t = clamp((uv.y - uBolt.y) / (top - uBolt.y), 0.0, 1.0);
-  float zig = (noise(vec2(uv.y * 9.0, uBolt.w)) - 0.5) * 0.14
-            + (noise(vec2(uv.y * 34.0, uBolt.w + 3.0)) - 0.5) * 0.05;
-  float d = abs(uv.x - mix(uBolt.x, uBolt.z, t) - zig * sin(t * 3.1416));
-  // Fade out just below the strike point (a hard cut shows as a line), plus a glow where it lands.
-  float end = smoothstep(-0.03, 0.01, uv.y - uBolt.y);
-  return end * (exp(-d * 260.0) + 0.35 * exp(-d * 30.0)) + 0.5 * exp(-length(uv - uBolt.xy) * 14.0);
+float zig(float y, float seed) {
+  return (noise(vec2(y * 9.0, seed)) - 0.5) * 0.14 + (noise(vec2(y * 34.0, seed + 3.0)) - 0.5) * 0.05;
+}
+
+// One jagged lightning segment from a (bottom) up to b (top). The zigzag is pinned to zero at both
+// ends so the bolt always lands exactly at a. width < 1 thins the core.
+float boltSeg(vec2 uv, vec2 a, vec2 b, float seed, float width) {
+  float t = clamp((uv.y - a.y) / (b.y - a.y), 0.0, 1.0);
+  float d = abs(uv.x - mix(a.x, b.x, t) - zig(uv.y, seed) * sin(t * 3.1416));
+  // Fade out just past each end (a hard cut shows as a line).
+  float inside = smoothstep(-0.03, 0.01, uv.y - a.y) * smoothstep(0.01, -0.01, uv.y - b.y);
+  return inside * (exp(-d * 260.0 / width) + 0.35 * width * exp(-d * 30.0));
+}
+
+// How bright a strike's channel is over time, like the real thing: nothing for the first 90 ms
+// (the leader is still stepping down), then the bright return stroke, two weaker re-strikes down the
+// same channel, and each decays fast. Only the thin channel flickers; the cloud glow is one soft pulse.
+float stroke(float age) {
+  float t = age - 0.09;
+  if (t < 0.0) return 0.0;
+  return exp(-t * 14.0) + 0.6 * step(0.11, t) * exp(-(t - 0.11) * 20.0)
+       + 0.4 * step(0.24, t) * exp(-(t - 0.24) * 20.0);
+}
+
+// One clicked strike. The leader grows down from the cloud in visible steps, dim and branching;
+// when it touches down the return stroke lights the whole channel (thicker while brightest), then
+// it fades through a violet afterglow. A charged strike is wider and keeps a fork. glow returns the
+// soft light it throws on the clouds.
+vec3 strike(vec2 uv, vec4 b, vec3 info, out float glow) {
+  glow = 0.0;
+  if (info.z < 0.5) return vec3(0.0);
+  float age = info.x, power = info.y;
+  vec2 a = b.xy, top = vec2(b.z, 0.5 * uRes.y / min(uRes.x, uRes.y) + 0.05);
+
+  float grow = floor(min(age / 0.09, 1.0) * 7.0) / 7.0;
+  float tipY = mix(top.y, a.y - 0.05, grow);
+  float shown = smoothstep(tipY - 0.01, tipY + 0.01, uv.y);
+  float s = stroke(age);
+  float after = step(0.09, age) * 0.15 * exp(-(age - 0.09) * 2.5);
+  float bright = age < 0.09 ? 0.3 : s + after;
+  float w = (1.0 + 0.8 * power) * (0.55 + 0.5 * min(s, 1.0));
+
+  float ch = boltSeg(uv, a, top, b.w, w);
+  float jy = mix(a.y, top.y, 0.5);
+  vec2 joint = vec2(mix(a.x, top.x, 0.5) + zig(jy, b.w), jy);
+  float side = fract(b.w) > 0.5 ? 1.0 : -1.0;
+  vec2 tip = vec2(a.x + side * (0.12 + 0.15 * power), mix(a.y, top.y, 0.22));
+  ch += smoothstep(0.4, 0.7, power) * 0.7 * boltSeg(uv, tip, joint, b.w + 11.0, 0.6);
+  // A leader branch that never reaches the ground: seen while the leader searches, gone soon after.
+  float jy2 = mix(a.y, top.y, 0.78);
+  vec2 joint2 = vec2(mix(a.x, top.x, 0.78) + zig(jy2, b.w), jy2);
+  vec2 tip2 = vec2(joint2.x - side * 0.1, mix(a.y, top.y, 0.55));
+  ch += exp(-max(age - 0.09, 0.0) * 10.0) * 0.6 * boltSeg(uv, tip2, joint2, b.w + 23.0, 0.5);
+
+  glow = step(0.09, age) * exp(-(age - 0.09) * 6.0) * (0.8 + 0.6 * power);
+  float impact = (0.5 + 0.5 * power) * s * exp(-length(uv - a) * 14.0 / w);
+  vec3 tint = mix(vec3(0.72, 0.62, 1.0), vec3(0.88, 0.93, 1.0), min(s * 2.0, 1.0));
+  return (shown * ch * bright + impact) * tint;
 }
 
 void main() {
@@ -78,7 +130,7 @@ void main() {
   // Cloud spiral: rotate each point by an angle that grows towards the centre.
   vec2 v = uv + uLook * 0.04;
   float r = length(v);
-  float turn = uTime * (0.04 + 0.22 * wind) + (0.9 + 2.2 * wind) / (r + 0.4);
+  float turn = uSpin + (0.9 + 2.2 * wind) / (r + 0.4);
   // Moving the pointer stirs the clouds around it: an extra twist that fades with distance.
   vec2 toP = uv - uPointer.xy;
   float near = uPointer.z * exp(-dot(toP, toP) * 6.0);
@@ -109,25 +161,34 @@ void main() {
 
   // Lightning lights the thick cloud more than the thin.
   cl += uFlash * (0.15 + 0.7 * lum) * vec3(0.75, 0.82, 1.0);
-  // A clicked strike lights the cloud around where it lands.
-  cl += uBoltT * (0.2 + 0.8 * lum) * 0.8 * exp(-length(uv - uBolt.xy) * 2.5) * vec3(0.75, 0.82, 1.0);
+  // Clicked strikes, and the light each throws on the cloud around where it lands.
+  vec3 bolts = vec3(0.0);
+  float boltGlow = 0.0;
+  for (int i = 0; i < BOLTS; i++) {
+    float g;
+    bolts += strike(uv, uBolt[i], uBoltAge[i], g);
+    boltGlow += g * exp(-length(uv - uBolt[i].xy) * 2.5);
+  }
+  cl += boltGlow * (0.2 + 0.8 * lum) * vec3(0.75, 0.82, 1.0);
+  // Holding the pointer down gathers a steady charge glow in the cloud around it.
+  cl += uCharge * (0.1 + 0.3 * lum) * exp(-length(toP) * 7.0) * vec3(0.55, 0.65, 1.0);
 
   // Clear sky: deep blue overhead, paler towards the wall, a small warm sun glow up and to the right.
   vec3 sky = mix(vec3(0.36, 0.6, 0.9), vec3(0.72, 0.84, 0.95), smoothstep(0.0, 0.45, r));
   sky += vec3(1.0, 0.8, 0.5) * 0.35 * exp(-8.0 * length(v - sun));
   vec3 col = mix(sky, cl, wall);
 
-  float slant = 0.15 + 0.5 * wind;
-  // Rain parts around the cursor like an umbrella: pushed outwards and thinned near it.
-  vec2 ruv = uv + normalize(toP + 1e-4) * 0.1 * near;
-  float rn = rain(ruv, 40.0, 1.6, slant, 0.35) * 0.5
-           + rain(ruv * 1.7 + 3.0, 70.0, 2.4, slant, 0.45) * 0.35
-           + rain(ruv * 0.6 + 9.0, 24.0, 1.1, slant, 0.25) * 0.7;
-  col += rn * rainAmt * (1.0 - 0.85 * uPointer.z * exp(-dot(toP, toP) * 40.0)) * vec3(0.7, 0.78, 0.85);
-  col += uBoltT * bolt(uv) * vec3(0.85, 0.9, 1.0);
+  float slant = 0.15 + 0.5 * wind + 0.5 * uGust;
+  // Two distant layers only. The near rain is drawn as particles (rain.ts) so the umbrella can block it.
+  float rn = rain(uv, 40.0, 1.6, slant, 0.35) * 0.5
+           + rain(uv * 1.7 + 3.0, 70.0, 2.4, slant, 0.45) * 0.35;
+
+  col += rn * rainAmt * 0.55 * vec3(0.7, 0.78, 0.85);
+  col += bolts;
 
   // Sheets of spray blowing across at the peak.
-  col = mix(col, vec3(0.35, 0.42, 0.44), wind * 0.3 * fbm(uv * vec2(0.8, 3.0) + vec2(uTime * 0.8 * wind, 0.0)));
+  float spray = (wind * 0.3 + uGust * 0.25 * (1.0 - eye));
+  col = mix(col, vec3(0.35, 0.42, 0.44), spray * fbm(uv * vec2(0.8, 3.0) + vec2(uSpin * 4.0, 0.0)));
 
   col *= 1.0 - 0.45 * smoothstep(0.5, 1.3, length(uv));
   col += (hash(gl_FragCoord.xy + fract(uTime) * 100.0) - 0.5) * 0.035;
